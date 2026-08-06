@@ -38,6 +38,11 @@ def get_db():
 # -----------------------------------------------------------------------
 # FIX 2: Parameterised query — SQL injection not possible
 # -----------------------------------------------------------------------
+@app.route("/health")
+def health():
+    return {"status": "healthy"}
+
+
 @app.route("/user")
 def get_user():
     username = request.args.get("username", "")
