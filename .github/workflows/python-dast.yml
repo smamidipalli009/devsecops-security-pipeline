@@ -26,7 +26,7 @@ permissions:
 jobs:
   dast-zap-python:
     name: OWASP ZAP — Python app
-    runs-on: ubuntu-latest
+    runs-on: [ self-hosted, Linux, X64, secops_machine ]
     # Only run if the SCA workflow passed (skip if it failed)
     if: >
       github.event_name == 'workflow_dispatch' ||

@@ -35,7 +35,7 @@ jobs:
   # -----------------------------------------------------------------------
   sca-trivy-python:
     name: Trivy — Python image
-    runs-on: ubuntu-latest
+    runs-on: [ self-hosted, Linux, X64, secops_machine ]
 
     steps:
       - name: Checkout

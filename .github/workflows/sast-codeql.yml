@@ -1,0 +1,106 @@
+name: SAST — CodeQL
+
+# Runs on every push and PR so vulnerabilities are caught before merge.
+# CodeQL scans source code statically — no build, no running app needed.
+# Currently covers: Python
+# Next: Java, .NET (C#), PHP (see comments at bottom)
+
+on:
+  push:
+    branches: [ "main" ]
+  pull_request:
+    branches: [ "main" ]
+  schedule:
+    - cron: "0 7 * * 1"   # weekly re-scan (new CodeQL rules ship regularly)
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+  security-events: write   # required to upload SARIF to Security tab
+  actions: read
+
+jobs:
+  # -----------------------------------------------------------------------
+  # Python SAST
+  # Detects: SQL injection, command injection, path traversal,
+  #          hardcoded credentials, Flask debug mode, and more.
+  # No build step needed — Python is interpreted.
+  # -----------------------------------------------------------------------
+  codeql-python:
+    name: CodeQL — Python
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Initialize CodeQL
+        uses: github/codeql-action/init@v3
+        with:
+          languages: python
+          # 'security-extended' adds more rules on top of the default set.
+          # Trade-off: more findings, slightly more noise — good for a demo
+          # because it surfaces more issues to talk about.
+          queries: security-extended
+          source-root: src/python
+
+      # No autobuild step needed for Python — CodeQL traces interpreted files directly.
+
+      - name: Perform CodeQL analysis
+        uses: github/codeql-action/analyze@v3
+        with:
+          category: sast-python
+          output: codeql-python-results.sarif
+
+      - name: Upload SARIF to Security tab
+        uses: github/codeql-action/upload-sarif@v3
+        if: always()
+        with:
+          sarif_file: codeql-python-results.sarif
+          category: sast-python
+
+# -----------------------------------------------------------------------
+# COMING NEXT — uncomment each block as you add that language's src/ dir
+# -----------------------------------------------------------------------
+
+# Java SAST (needs a build step — CodeQL compiles the code to analyze it)
+#
+#  codeql-java:
+#    name: CodeQL — Java
+#    runs-on: ubuntu-latest
+#    steps:
+#      - uses: actions/checkout@v4
+#      - uses: actions/setup-java@v4
+#        with: { java-version: '17', distribution: 'temurin' }
+#      - uses: github/codeql-action/init@v3
+#        with: { languages: java, queries: security-extended, source-root: src/java }
+#      - uses: github/codeql-action/autobuild@v3   # CodeQL builds it automatically
+#      - uses: github/codeql-action/analyze@v3
+#        with: { category: sast-java }
+
+# .NET / C# SAST (also needs a build step)
+#
+#  codeql-dotnet:
+#    name: CodeQL — .NET (C#)
+#    runs-on: ubuntu-latest
+#    steps:
+#      - uses: actions/checkout@v4
+#      - uses: actions/setup-dotnet@v4
+#        with: { dotnet-version: '8.x' }
+#      - uses: github/codeql-action/init@v3
+#        with: { languages: csharp, queries: security-extended, source-root: src/dotnet }
+#      - uses: github/codeql-action/autobuild@v3
+#      - uses: github/codeql-action/analyze@v3
+#        with: { category: sast-dotnet }
+
+# PHP SAST (interpreted — no build step needed, same as Python)
+#
+#  codeql-php:
+#    name: CodeQL — PHP
+#    runs-on: ubuntu-latest
+#    steps:
+#      - uses: actions/checkout@v4
+#      - uses: github/codeql-action/init@v3
+#        with: { languages: php, queries: security-extended, source-root: src/php }
+#      - uses: github/codeql-action/analyze@v3
+#        with: { category: sast-php }

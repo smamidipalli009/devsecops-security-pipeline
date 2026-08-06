@@ -28,7 +28,7 @@ jobs:
   # -----------------------------------------------------------------------
   codeql-python:
     name: CodeQL — Python
-    runs-on: ubuntu-latest
+    runs-on: [ self-hosted, Linux, X64, secops_machine ]
 
     steps:
       - name: Checkout repository
