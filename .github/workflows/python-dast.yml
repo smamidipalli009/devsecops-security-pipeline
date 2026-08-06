@@ -1,0 +1,100 @@
+name: Python — DAST (OWASP ZAP)
+
+# Spins up the Python Flask container inside the GitHub Actions runner,
+# runs an OWASP ZAP baseline scan against it, then tears it down.
+#
+# This is the "DAST" layer — unlike SAST (source code) and SCA
+# (dependencies), DAST sends real HTTP traffic to a running app and
+# finds issues only visible at runtime: missing security headers,
+# exposed endpoints, misconfigured CORS, etc.
+#
+# Runs after SCA passes (needs a built + pushed image in GHCR),
+# or can be triggered manually with workflow_dispatch.
+
+on:
+  workflow_run:
+    workflows: [ "Python — SCA (Trivy)" ]
+    types: [ completed ]
+    branches: [ "main" ]
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+  security-events: write
+  issues: write       # ZAP action can open GitHub issues for findings
+
+jobs:
+  dast-zap-python:
+    name: OWASP ZAP — Python app
+    runs-on: ubuntu-latest
+    # Only run if the SCA workflow passed (skip if it failed)
+    if: >
+      github.event_name == 'workflow_dispatch' ||
+      github.event.workflow_run.conclusion == 'success'
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      # Build the app image locally (ZAP needs a running target)
+      - name: Build Python app image
+        uses: docker/build-push-action@v6
+        with:
+          context: src/python
+          file: src/python/Dockerfile
+          push: false
+          tags: python-app:dast
+          load: true
+
+      # Start the app container in the background
+      - name: Start Python app container
+        run: |
+          docker run -d \
+            --name python-app \
+            --network host \
+            -e FLASK_DEBUG=false \
+            python-app:dast
+          echo "Waiting for app to be ready..."
+          sleep 5
+
+      # Health check — confirm app is up before ZAP starts
+      - name: Health check
+        run: |
+          for i in {1..10}; do
+            if curl -sf http://localhost:5000/health; then
+              echo "App is up"
+              exit 0
+            fi
+            echo "Attempt $i failed, retrying in 3s..."
+            sleep 3
+          done
+          echo "App failed to start"
+          docker logs python-app
+          exit 1
+
+      # ZAP baseline scan — passive scan + active probe of all endpoints
+      # "baseline" is the right choice for CI: fast, no destructive tests
+      - name: OWASP ZAP baseline scan
+        uses: zaproxy/action-baseline@v0.12.0
+        with:
+          target: "http://localhost:5000"
+          rules_file_name: ".zap/rules.tsv"
+          cmd_options: "-I"           # -I = don't fail on warnings, only errors
+          artifact_name: zap-python-report
+          issue_title: "DAST — Python app ZAP findings"
+
+      # Upload ZAP SARIF to Security tab
+      - name: Upload ZAP SARIF to Security tab
+        uses: github/codeql-action/upload-sarif@v3
+        if: always()
+        with:
+          sarif_file: results.sarif
+          category: dast-python
+
+      # Always stop + remove the container, even if ZAP failed
+      - name: Stop app container
+        if: always()
+        run: docker stop python-app && docker rm python-app

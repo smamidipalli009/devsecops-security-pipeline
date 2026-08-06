@@ -1,0 +1,129 @@
+name: Python — SCA (Trivy)
+
+# Builds the Python Docker image and scans it for:
+#   - OS-level CVEs (distroless base layer)
+#   - Dependency CVEs (pip packages)
+#   - Dockerfile misconfigurations
+#   - Secrets baked into the image
+# Runs AFTER code is committed — SCA needs a built image, unlike SAST.
+
+on:
+  push:
+    branches: [ "main" ]
+    paths:
+      - "src/python/**"
+  pull_request:
+    branches: [ "main" ]
+    paths:
+      - "src/python/**"
+  schedule:
+    - cron: "0 6 * * 1"   # weekly — catch new CVEs against unchanged images
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+  security-events: write
+  packages: write
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_NAME: ${{ github.repository }}/python-app
+
+jobs:
+  # -----------------------------------------------------------------------
+  # 1. Build the Docker image locally and scan before pushing anywhere
+  # -----------------------------------------------------------------------
+  sca-trivy-python:
+    name: Trivy — Python image
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build Python image (local, for scanning)
+        uses: docker/build-push-action@v6
+        with:
+          context: src/python
+          file: src/python/Dockerfile
+          push: false
+          tags: python-app:${{ github.sha }}
+          load: true
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      # --- Full report: all severities, readable in the Actions log ---
+      - name: Trivy scan — full report (table)
+        uses: aquasecurity/trivy-action@0.28.0
+        with:
+          image-ref: python-app:${{ github.sha }}
+          format: table
+          severity: LOW,MEDIUM,HIGH,CRITICAL
+          exit-code: "0"
+
+      # --- SARIF upload → Security tab, category: sca-python ---
+      - name: Trivy scan — SARIF for Security tab
+        uses: aquasecurity/trivy-action@0.28.0
+        with:
+          image-ref: python-app:${{ github.sha }}
+          format: sarif
+          output: trivy-python.sarif
+          severity: LOW,MEDIUM,HIGH,CRITICAL
+
+      - name: Upload Trivy SARIF
+        uses: github/codeql-action/upload-sarif@v3
+        if: always()
+        with:
+          sarif_file: trivy-python.sarif
+          category: sca-python
+
+      # --- Gate: fail if HIGH/CRITICAL fixable vulns exist ---
+      - name: Trivy gate — fail on HIGH/CRITICAL
+        uses: aquasecurity/trivy-action@0.28.0
+        with:
+          image-ref: python-app:${{ github.sha }}
+          format: table
+          severity: HIGH,CRITICAL
+          exit-code: "1"
+          ignore-unfixed: true
+
+      # --- Generate SBOM ---
+      - name: Generate SBOM (CycloneDX)
+        uses: aquasecurity/trivy-action@0.28.0
+        with:
+          image-ref: python-app:${{ github.sha }}
+          format: cyclonedx
+          output: sbom-python.json
+
+      - name: Upload SBOM artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: sbom-python
+          path: sbom-python.json
+
+      # --- Push to GHCR only after gate passes ---
+      - name: Log in to GHCR
+        if: github.event_name != 'pull_request'
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Compute lowercase image name
+        if: github.event_name != 'pull_request'
+        run: echo "IMAGE_NAME_LC=${IMAGE_NAME,,}" >> "$GITHUB_ENV"
+
+      - name: Push to GHCR
+        if: github.event_name != 'pull_request'
+        uses: docker/build-push-action@v6
+        with:
+          context: src/python
+          file: src/python/Dockerfile
+          push: true
+          tags: |
+            ${{ env.REGISTRY }}/${{ env.IMAGE_NAME_LC }}:latest
+            ${{ env.REGISTRY }}/${{ env.IMAGE_NAME_LC }}:${{ github.sha }}
