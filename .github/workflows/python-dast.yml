@@ -36,8 +36,7 @@ jobs:
           tags: python-app:dast
           load: true
 
-      # Port 5001 — avoids conflict with anything already running on 5000
-      # on this self-hosted runner (e.g. AirPlay, other services)
+      # Force-remove any stale container from a previous failed run
       - name: Start Python app container
         run: |
           docker rm -f python-app 2>/dev/null || true
@@ -63,22 +62,103 @@ jobs:
           docker logs python-app
           exit 1
 
-      # ZAP baseline scan against port 5001
+      # ZAP baseline scan
+      # The action writes: zap_report.html, zap_report.json, zap.out
+      # SARIF output requires --sarif flag via cmd_options
       - name: OWASP ZAP baseline scan
         uses: zaproxy/action-baseline@v0.12.0
         with:
           target: "http://localhost:5001"
           rules_file_name: ".zap/rules.tsv"
-          cmd_options: "-I"
+          cmd_options: "-I -J zap_results.json"
           artifact_name: zap-python-report
           issue_title: "DAST — Python app ZAP findings"
 
-      # Upload ZAP SARIF — ZAP action writes to results.sarif in workspace root
+      # Convert ZAP JSON output to SARIF using a simple script
+      # ZAP's action-baseline does not natively produce a SARIF file —
+      # we generate a minimal one from the JSON report so the Security
+      # tab gets populated.
+      - name: Convert ZAP JSON to SARIF
+        if: always()
+        run: |
+          python3 << 'PYEOF'
+          import json, os
+
+          sarif = {
+            "version": "2.1.0",
+            "$schema": "https://json.schemastore.org/sarif-2.1.0.json",
+            "runs": [{
+              "tool": {
+                "driver": {
+                  "name": "OWASP ZAP",
+                  "version": "2.x",
+                  "rules": []
+                }
+              },
+              "results": []
+            }]
+          }
+
+          report_file = "zap_results.json"
+          if not os.path.exists(report_file):
+            # No findings — write an empty valid SARIF
+            print("No ZAP JSON report found, writing empty SARIF")
+            with open("zap_sarif.sarif", "w") as f:
+              json.dump(sarif, f)
+            exit(0)
+
+          with open(report_file) as f:
+            zap = json.load(f)
+
+          rules = {}
+          results = []
+
+          for site in zap.get("site", []):
+            for alert in site.get("alerts", []):
+              rule_id = alert.get("pluginid", "unknown")
+              rule_name = alert.get("alert", "Unknown")
+              risk = alert.get("riskcode", "1")
+
+              severity_map = {"3": "error", "2": "warning", "1": "note", "0": "none"}
+              severity = severity_map.get(str(risk), "warning")
+
+              if rule_id not in rules:
+                rules[rule_id] = {
+                  "id": rule_id,
+                  "name": rule_name,
+                  "shortDescription": {"text": rule_name},
+                  "helpUri": alert.get("reference", "https://www.zaproxy.org/"),
+                  "properties": {"problem.severity": severity}
+                }
+
+              for instance in alert.get("instances", [{}]):
+                results.append({
+                  "ruleId": rule_id,
+                  "level": severity,
+                  "message": {"text": alert.get("desc", rule_name)},
+                  "locations": [{
+                    "physicalLocation": {
+                      "artifactLocation": {
+                        "uri": instance.get("uri", site.get("@name", "unknown"))
+                      }
+                    }
+                  }]
+                })
+
+          sarif["runs"][0]["tool"]["driver"]["rules"] = list(rules.values())
+          sarif["runs"][0]["results"] = results
+
+          with open("zap_sarif.sarif", "w") as f:
+            json.dump(sarif, f, indent=2)
+
+          print(f"SARIF written: {len(results)} findings, {len(rules)} rules")
+          PYEOF
+
       - name: Upload ZAP SARIF to Security tab
         uses: github/codeql-action/upload-sarif@v4
         if: always()
         with:
-          sarif_file: results.sarif
+          sarif_file: zap_sarif.sarif
           category: dast-python
 
       - name: Stop app container
