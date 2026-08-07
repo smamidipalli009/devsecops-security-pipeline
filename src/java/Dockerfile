@@ -2,9 +2,9 @@
 FROM maven:3.9-eclipse-temurin-17-alpine AS builder
 WORKDIR /app
 COPY pom.xml .
-RUN mvn dependency:go-offline -q
+RUN mvn dependency:go-offline --no-transfer-progress
 COPY src ./src
-RUN mvn package -DskipTests -q
+RUN mvn package -DskipTests --no-transfer-progress
 
 # Stage 2: minimal distroless runtime — no shell, no package manager
 FROM gcr.io/distroless/java17-debian12:nonroot
