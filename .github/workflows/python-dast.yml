@@ -112,6 +112,19 @@ jobs:
           sarif_file: ${{ github.workspace }}/zap_sarif.sarif
           category: dast-python
 
+
+      - name: Upload ZAP reports as artifacts
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: zap-reports
+          path: |
+            ${{ github.workspace }}/zap_report.json
+            ${{ github.workspace }}/zap_report.html
+            ${{ github.workspace }}/zap_report.md
+            ${{ github.workspace }}/zap_sarif.sarif
+          retention-days: 14
+
       - name: Stop app container
         if: always()
         run: |
