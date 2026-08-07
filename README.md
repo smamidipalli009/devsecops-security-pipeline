@@ -228,47 +228,47 @@ Runner dependencies:
 ## Screenshots
 
 ### All workflow runs
-![Workflow Runs](docs/screenshots/workflow-runs.png)
+![Workflow Runs](docs/screenshots/workflow-all.png)
 
 ---
 
 ### Python DAST — OWASP ZAP runs
-![Python DAST](docs/screenshots/python-pipeline.png)
+![Python DAST](docs/screenshots/python-dast.png)
 
 ---
 
 ### Python SAST — CodeQL runs
-![Python SAST](docs/screenshots/python-sast-runs.png)
+![Python SAST](docs/screenshots/python-sast.png)
 
 ---
 
 ### Python SCA — Trivy runs (gating HIGH/CRITICAL)
-![Python SCA](docs/screenshots/python-sca-runs.png)
+![Python SCA](docs/screenshots/python-sca.png)
 
 ---
 
 ### Java DAST — OWASP ZAP runs
-![Java DAST](docs/screenshots/java-pipeline.png)
+![Java DAST](docs/screenshots/java-dast.png)
 
 ---
 
 ### Java SAST — CodeQL runs
-![Java SAST](docs/screenshots/java-sast-runs.png)
+![Java SAST](docs/screenshots/java-sast.png)
 
 ---
 
 ### Java SCA — Trivy runs
-![Java SCA](docs/screenshots/java-sca-runs.png)
+![Java SCA](docs/screenshots/java-sca.png)
 
 ---
 
 ### Code scanning — 407 alerts (Trivy CVEs)
-![Code Scanning All](docs/screenshots/code-scanning-sca.png)
+![Code Scanning All](docs/screenshots/code-scanning-all.png)
 
 ---
 
 ### Code scanning — Python findings (CodeQL + ZAP)
-![Code Scanning Python](docs/screenshots/code-scanning-sast.png)
+![Code Scanning Python](docs/screenshots/code-scanning-python.png)
 
 ---
 
