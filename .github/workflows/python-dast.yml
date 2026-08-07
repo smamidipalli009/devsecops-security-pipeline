@@ -113,7 +113,6 @@ jobs:
           target: "http://localhost:5001/"
           rules_file_name: ".zap/rules.tsv"
           cmd_options: "-I"
-          artifact_name: zap_python_report
           issue_title: "DAST — Python app ZAP findings"
           token: ${{ secrets.GITHUB_TOKEN }}
 
