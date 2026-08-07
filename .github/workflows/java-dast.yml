@@ -1,0 +1,138 @@
+name: Java - DAST (OWASP ZAP)
+
+on:
+  workflow_run:
+    workflows: ["Java - SCA (Trivy)"]
+    types: [completed]
+    branches: [main]
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+  security-events: write
+  issues: write
+
+jobs:
+  dast-zap-java:
+    name: OWASP ZAP - Java app
+    runs-on: [self-hosted, Linux, X64, secops_machine]
+    if: >
+      github.event_name == 'workflow_dispatch' ||
+      github.event.workflow_run.conclusion == 'success'
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Verify workspace
+        run: |
+          cd $GITHUB_WORKSPACE
+          echo "PWD=$(pwd)"
+          ls -la $GITHUB_WORKSPACE/src/java/
+          ls -la $GITHUB_WORKSPACE/scripts/
+
+      - name: Cleanup stale containers and images
+        run: |
+          cd $GITHUB_WORKSPACE
+          docker rm -f java-app 2>/dev/null || true
+          docker rmi -f java-app:dast 2>/dev/null || true
+          docker ps
+          docker images | grep java-app || echo "no java images"
+
+      - name: Build Java app image
+        run: |
+          cd $GITHUB_WORKSPACE/src/java
+          echo "PWD=$(pwd)"
+          ls -la
+          docker build -t java-app:dast .
+          docker images | grep java-app
+
+      - name: Start Java app container
+        run: |
+          cd $GITHUB_WORKSPACE
+          echo "PWD=$(pwd)"
+          # Port 8081 on host -> 8080 in container (avoids conflicts)
+          docker run -d \
+            --name java-app \
+            -p 8081:8080 \
+            -e DB_PASSWORD=test \
+            -e API_KEY=test \
+            java-app:dast
+          echo "Waiting 15s for Spring Boot to start..."
+          sleep 15
+          docker ps | grep java-app
+          echo "=== Container logs ==="
+          docker logs java-app
+
+      - name: Health check
+        run: |
+          cd $GITHUB_WORKSPACE
+          echo "PWD=$(pwd)"
+          for i in {1..15}; do
+            STATUS=$(curl -o /dev/null -s -w "%{http_code}" http://localhost:8081/health)
+            echo "Attempt $i - HTTP $STATUS"
+            if [ "$STATUS" = "200" ]; then
+              echo "App is healthy"
+              exit 0
+            fi
+            sleep 5
+          done
+          echo "=== App failed to start ==="
+          docker logs java-app
+          exit 1
+
+      - name: Run OWASP ZAP baseline scan
+        run: |
+          cd $GITHUB_WORKSPACE
+          echo "PWD=$(pwd)"
+          touch zap_report.json zap_report.html zap_report.md
+          chmod a+w zap_report.json zap_report.html zap_report.md
+          docker run --rm \
+            --network host \
+            -v $GITHUB_WORKSPACE:/zap/wrk/:rw \
+            ghcr.io/zaproxy/zaproxy:stable \
+            zap-baseline.py \
+            -t http://localhost:8081/ \
+            -J zap_report.json \
+            -r zap_report.html \
+            -w zap_report.md \
+            -I \
+            -c .zap/rules.tsv || true
+          echo "After ZAP:"
+          ls -la $GITHUB_WORKSPACE/
+          wc -c $GITHUB_WORKSPACE/zap_report.json
+
+      - name: Convert ZAP JSON to SARIF
+        if: always()
+        run: |
+          cd $GITHUB_WORKSPACE
+          echo "PWD=$(pwd)"
+          ls -la $GITHUB_WORKSPACE/
+          python3 $GITHUB_WORKSPACE/scripts/zap_to_sarif.py
+          ls -la $GITHUB_WORKSPACE/
+
+      - name: Upload ZAP SARIF to Security tab
+        uses: github/codeql-action/upload-sarif@v4
+        if: always()
+        with:
+          sarif_file: ${{ github.workspace }}/zap_sarif.sarif
+          category: dast-java
+
+      - name: Upload ZAP reports as artifacts
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: zap-java-reports
+          path: |
+            ${{ github.workspace }}/zap_report.json
+            ${{ github.workspace }}/zap_report.html
+            ${{ github.workspace }}/zap_report.md
+            ${{ github.workspace }}/zap_sarif.sarif
+          retention-days: 14
+
+      - name: Stop app container
+        if: always()
+        run: |
+          cd $GITHUB_WORKSPACE
+          docker stop java-app && docker rm java-app || true
+          docker ps
