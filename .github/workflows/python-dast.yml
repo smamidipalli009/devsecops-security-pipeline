@@ -1,10 +1,10 @@
-name: Python — DAST (OWASP ZAP)
+name: Python - DAST (OWASP ZAP)
 
 on:
   workflow_run:
-    workflows: [ "Python — SCA (Trivy)" ]
-    types: [ completed ]
-    branches: [ "main" ]
+    workflows: ["Python - SCA (Trivy)"]
+    types: [completed]
+    branches: [main]
   workflow_dispatch: {}
 
 permissions:
@@ -14,8 +14,8 @@ permissions:
 
 jobs:
   dast-zap-python:
-    name: OWASP ZAP — Python app
-    runs-on: [ self-hosted, Linux, X64, secops_machine ]
+    name: OWASP ZAP - Python app
+    runs-on: [self-hosted, Linux, X64, secops_machine]
     if: >
       github.event_name == 'workflow_dispatch' ||
       github.event.workflow_run.conclusion == 'success'
@@ -27,85 +27,60 @@ jobs:
       - name: Verify workspace
         run: |
           cd $GITHUB_WORKSPACE
-          echo "=== PWD ===" && pwd
-          echo "=== GITHUB_WORKSPACE ===" && echo $GITHUB_WORKSPACE
-          echo "=== Workspace root files ==="
+          echo "PWD=$(pwd)"
           ls -la $GITHUB_WORKSPACE/
-          echo "=== src/python files ==="
           ls -la $GITHUB_WORKSPACE/src/python/
-          echo "=== .zap files ==="
           ls -la $GITHUB_WORKSPACE/.zap/
+          ls -la $GITHUB_WORKSPACE/scripts/
 
       - name: Cleanup stale containers and images
         run: |
           cd $GITHUB_WORKSPACE
-          echo "=== PWD ===" && pwd
+          echo "PWD=$(pwd)"
           docker rm -f python-app 2>/dev/null || true
           docker rmi -f python-app:dast 2>/dev/null || true
-          echo "=== Containers after cleanup ==="
           docker ps
-          echo "=== Python images after cleanup ==="
           docker images | grep python || echo "no python images"
 
       - name: Build Python app image
         run: |
           cd $GITHUB_WORKSPACE/src/python
-          echo "=== PWD ===" && pwd
-          echo "=== Files in build context ==="
+          echo "PWD=$(pwd)"
           ls -la
-          echo "=== Building Docker image ==="
           docker build -t python-app:dast .
-          echo "=== Image built — verifying ==="
           docker images | grep python-app
 
       - name: Start Python app container
         run: |
           cd $GITHUB_WORKSPACE
-          echo "=== PWD ===" && pwd
-          docker run -d \
-            --name python-app \
-            -p 5001:5000 \
-            -e FLASK_DEBUG=false \
-            python-app:dast
-          echo "=== Waiting 5s ==="
+          echo "PWD=$(pwd)"
+          docker run -d --name python-app -p 5001:5000 -e FLASK_DEBUG=false python-app:dast
           sleep 5
-          echo "=== Container status ==="
           docker ps | grep python-app
-          echo "=== Container logs ==="
           docker logs python-app
 
       - name: Health check
         run: |
           cd $GITHUB_WORKSPACE
-          echo "=== PWD ===" && pwd
+          echo "PWD=$(pwd)"
           for i in {1..10}; do
             STATUS=$(curl -o /dev/null -s -w "%{http_code}" http://localhost:5001/health)
-            echo "Attempt $i — HTTP $STATUS"
+            echo "Attempt $i - HTTP $STATUS"
             if [ "$STATUS" = "200" ]; then
               echo "App is healthy"
               exit 0
             fi
             sleep 3
           done
-          echo "=== FAILED — container logs ==="
           docker logs python-app
           exit 1
 
       - name: Run OWASP ZAP baseline scan
         run: |
           cd $GITHUB_WORKSPACE
-          echo "=== PWD ===" && pwd
-          echo "=== Creating report files in $GITHUB_WORKSPACE ==="
-          touch $GITHUB_WORKSPACE/zap_report.json
-          touch $GITHUB_WORKSPACE/zap_report.html
-          touch $GITHUB_WORKSPACE/zap_report.md
-          chmod a+w $GITHUB_WORKSPACE/zap_report.json \
-                    $GITHUB_WORKSPACE/zap_report.html \
-                    $GITHUB_WORKSPACE/zap_report.md
-          echo "=== Files before ZAP ==="
-          ls -la $GITHUB_WORKSPACE/
-          echo "=== Running ZAP docker container ==="
-          echo "=== Mounting: $GITHUB_WORKSPACE -> /zap/wrk/ ==="
+          echo "PWD=$(pwd)"
+          touch zap_report.json zap_report.html zap_report.md
+          chmod a+w zap_report.json zap_report.html zap_report.md
           docker run --rm \
             --network host \
             -v $GITHUB_WORKSPACE:/zap/wrk/:rw \
@@ -117,82 +92,17 @@ jobs:
             -w zap_report.md \
             -I \
             -c .zap/rules.tsv || true
-          echo "=== ZAP complete ==="
-          echo "=== Files after ZAP ==="
+          echo "After ZAP:"
           ls -la $GITHUB_WORKSPACE/
-          echo "=== zap_report.json size ==="
           wc -c $GITHUB_WORKSPACE/zap_report.json
 
       - name: Convert ZAP JSON to SARIF
         if: always()
         run: |
           cd $GITHUB_WORKSPACE
-          echo "=== PWD ===" && pwd
-          echo "=== Files before conversion ==="
+          echo "PWD=$(pwd)"
           ls -la $GITHUB_WORKSPACE/
-
-          python3 - << 'PYEOF'
-import json, os
-
-workspace   = os.environ.get("GITHUB_WORKSPACE", ".")
-report_file = os.path.join(workspace, "zap_report.json")
-sarif_file  = os.path.join(workspace, "zap_sarif.sarif")
-
-print(f"CWD:         {os.getcwd()}")
-print(f"Workspace:   {workspace}")
-print(f"Report file: {report_file}")
-print(f"SARIF file:  {sarif_file}")
-
-sarif = {
-  "version": "2.1.0",
-  "$schema": "https://json.schemastore.org/sarif-2.1.0.json",
-  "runs": [{
-    "tool": {"driver": {"name": "OWASP ZAP", "version": "2.x", "rules": []}},
-    "results": []
-  }]
-}
-
-if not os.path.exists(report_file) or os.path.getsize(report_file) == 0:
-  print(f"WARNING: ZAP JSON not found or empty")
-  print(f"Files in workspace: {os.listdir(workspace)}")
-  with open(sarif_file, "w") as f:
-    json.dump(sarif, f)
-  exit(0)
-
-with open(report_file) as f:
-  zap = json.load(f)
-
-rules, results = {}, []
-for site in zap.get("site", []):
-  for alert in site.get("alerts", []):
-    rule_id   = alert.get("pluginid", "unknown")
-    rule_name = alert.get("alert", "Unknown")
-    severity  = {"3":"error","2":"warning","1":"note","0":"none"}.get(
-                  str(alert.get("riskcode","1")), "warning")
-    if rule_id not in rules:
-      rules[rule_id] = {
-        "id": rule_id, "name": rule_name,
-        "shortDescription": {"text": rule_name},
-        "helpUri": alert.get("reference", "https://www.zaproxy.org/"),
-        "properties": {"problem.severity": severity}
-      }
-    for instance in alert.get("instances", [{}]):
-      results.append({
-        "ruleId": rule_id, "level": severity,
-        "message": {"text": alert.get("desc", rule_name)},
-        "locations": [{"physicalLocation": {"artifactLocation": {
-          "uri": instance.get("uri", site.get("@name", "unknown"))
-        }}}]
-      })
-
-sarif["runs"][0]["tool"]["driver"]["rules"] = list(rules.values())
-sarif["runs"][0]["results"] = results
-with open(sarif_file, "w") as f:
-  json.dump(sarif, f, indent=2)
-print(f"SARIF written: {len(results)} findings, {len(rules)} rules")
-PYEOF
-
-          echo "=== Files after conversion ==="
+          python3 $GITHUB_WORKSPACE/scripts/zap_to_sarif.py
           ls -la $GITHUB_WORKSPACE/
 
       - name: Upload ZAP SARIF to Security tab
@@ -206,8 +116,6 @@ PYEOF
         if: always()
         run: |
           cd $GITHUB_WORKSPACE
-          echo "=== PWD ===" && pwd
-          echo "=== Stopping container ==="
+          echo "PWD=$(pwd)"
           docker stop python-app && docker rm python-app || true
-          echo "=== Remaining containers ==="
           docker ps
