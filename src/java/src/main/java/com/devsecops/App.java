@@ -1,8 +1,5 @@
 package com.devsecops;
 
-import org.springframework.boot.SpringApplication;
-import org.springframework.boot.autoconfigure.SpringBootApplication;
-import org.springframework.web.bind.annotation.*;
 import java.io.*;
 import java.sql.*;
 import javax.xml.parsers.*;
@@ -10,7 +7,8 @@ import org.xml.sax.InputSource;
 import java.net.*;
 
 /**
- * Vulnerable Spring Boot application — intentional SAST findings for CodeQL.
+ * Vulnerable code samples — intentional SAST findings for CodeQL.
+ * NOT a runnable Spring Boot app — just source code for static analysis.
  * DO NOT deploy to production.
  *
  * Vulnerabilities:
@@ -21,8 +19,6 @@ import java.net.*;
  *   5. XXE                   — XML parser with external entities enabled
  *   6. SSRF                  — user-controlled URL fetched server-side
  */
-@SpringBootApplication
-@RestController
 public class App {
 
     // VULNERABILITY 1: Hardcoded credentials
@@ -30,75 +26,49 @@ public class App {
     private static final String DB_PASSWORD = "supersecret123";
     private static final String API_KEY     = "sk-prod-abc123xyz";
 
-    public static void main(String[] args) {
-        SpringApplication.run(App.class, args);
-    }
-
-    @GetMapping("/")
-    public String index() {
-        return "{\"status\":\"ok\",\"message\":\"Java DevSecOps demo app\"}";
-    }
-
-    @GetMapping("/health")
-    public String health() {
-        return "{\"status\":\"healthy\"}";
-    }
-
     // VULNERABILITY 2: SQL Injection
     // CodeQL: java/sql-injection
-    @GetMapping("/user")
-    public String getUser(@RequestParam String username) throws Exception {
+    public String getUser(String username) throws Exception {
         Connection conn = DriverManager.getConnection("jdbc:h2:mem:test", "sa", DB_PASSWORD);
-        // BAD: string concatenation directly into SQL
         String query = "SELECT * FROM users WHERE username = '" + username + "'";
         Statement stmt = conn.createStatement();
         ResultSet rs = stmt.executeQuery(query);
-        return "{\"result\":\"" + rs.next() + "\"}";
+        return String.valueOf(rs.next());
     }
 
     // VULNERABILITY 3: Command Injection
     // CodeQL: java/command-line-injection
-    @GetMapping("/ping")
-    public String ping(@RequestParam String host) throws Exception {
-        // BAD: user input passed directly to shell
+    public String ping(String host) throws Exception {
         Runtime rt = Runtime.getRuntime();
         Process proc = rt.exec("ping -c 1 " + host);
         BufferedReader reader = new BufferedReader(
             new InputStreamReader(proc.getInputStream()));
-        return "{\"output\":\"" + reader.readLine() + "\"}";
+        return reader.readLine();
     }
 
     // VULNERABILITY 4: Path Traversal
     // CodeQL: java/path-injection
-    @GetMapping("/file")
-    public String readFile(@RequestParam String filename) throws Exception {
-        // BAD: user controls the file path — can read /etc/passwd etc.
+    public String readFile(String filename) throws Exception {
         File file = new File(filename);
         BufferedReader br = new BufferedReader(new FileReader(file));
-        return "{\"content\":\"" + br.readLine() + "\"}";
+        return br.readLine();
     }
 
-    // VULNERABILITY 5: XXE (XML External Entity)
+    // VULNERABILITY 5: XXE
     // CodeQL: java/xxe
-    @PostMapping("/xml")
-    public String parseXml(@RequestBody String xmlInput) throws Exception {
-        // BAD: DocumentBuilderFactory with external entities enabled
+    public void parseXml(String xmlInput) throws Exception {
         DocumentBuilderFactory dbf = DocumentBuilderFactory.newInstance();
-        // Missing: dbf.setFeature("http://apache.org/xml/features/disallow-doctype-decl", true)
         DocumentBuilder db = dbf.newDocumentBuilder();
         db.parse(new InputSource(new StringReader(xmlInput)));
-        return "{\"status\":\"parsed\"}";
     }
 
-    // VULNERABILITY 6: SSRF (Server Side Request Forgery)
+    // VULNERABILITY 6: SSRF
     // CodeQL: java/ssrf
-    @GetMapping("/fetch")
-    public String fetchUrl(@RequestParam String url) throws Exception {
-        // BAD: user-controlled URL fetched directly
+    public String fetchUrl(String url) throws Exception {
         URL targetUrl = new URL(url);
         HttpURLConnection conn = (HttpURLConnection) targetUrl.openConnection();
         BufferedReader reader = new BufferedReader(
             new InputStreamReader(conn.getInputStream()));
-        return "{\"content\":\"" + reader.readLine() + "\"}";
+        return reader.readLine();
     }
 }
