@@ -38,6 +38,10 @@
             <plugin>
                 <groupId>org.springframework.boot</groupId>
                 <artifactId>spring-boot-maven-plugin</artifactId>
+                <configuration>
+                    <!-- AppFixed is the hardened version we deploy -->
+                    <mainClass>com.devsecops.AppFixed</mainClass>
+                </configuration>
             </plugin>
         </plugins>
     </build>
