@@ -47,8 +47,8 @@ jobs:
       - name: Build Python image (local, for scanning)
         uses: docker/build-push-action@v6
         with:
-          context: src/python
-          file: src/python/Dockerfile
+          context: ${{ github.workspace }}/src/python
+          file: ${{ github.workspace }}/src/python/Dockerfile
           push: false
           tags: python-app:${{ github.sha }}
           load: true
@@ -57,7 +57,7 @@ jobs:
 
       # --- Full report: all severities, readable in the Actions log ---
       - name: Trivy scan — full report (table)
-        uses: aquasecurity/trivy-action@0.28.0
+        uses: aquasecurity/trivy-action@0.35.0
         with:
           image-ref: python-app:${{ github.sha }}
           format: table
@@ -66,7 +66,7 @@ jobs:
 
       # --- SARIF upload → Security tab, category: sca-python ---
       - name: Trivy scan — SARIF for Security tab
-        uses: aquasecurity/trivy-action@0.28.0
+        uses: aquasecurity/trivy-action@0.35.0
         with:
           image-ref: python-app:${{ github.sha }}
           format: sarif
@@ -82,7 +82,7 @@ jobs:
 
       # --- Gate: fail if HIGH/CRITICAL fixable vulns exist ---
       - name: Trivy gate — fail on HIGH/CRITICAL
-        uses: aquasecurity/trivy-action@0.28.0
+        uses: aquasecurity/trivy-action@0.35.0
         with:
           image-ref: python-app:${{ github.sha }}
           format: table
@@ -92,7 +92,7 @@ jobs:
 
       # --- Generate SBOM ---
       - name: Generate SBOM (CycloneDX)
-        uses: aquasecurity/trivy-action@0.28.0
+        uses: aquasecurity/trivy-action@0.35.0
         with:
           image-ref: python-app:${{ github.sha }}
           format: cyclonedx
@@ -121,8 +121,8 @@ jobs:
         if: github.event_name != 'pull_request'
         uses: docker/build-push-action@v6
         with:
-          context: src/python
-          file: src/python/Dockerfile
+          context: ${{ github.workspace }}/src/python
+          file: ${{ github.workspace }}/src/python/Dockerfile
           push: true
           tags: |
             ${{ env.REGISTRY }}/${{ env.IMAGE_NAME_LC }}:latest
