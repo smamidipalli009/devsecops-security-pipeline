@@ -49,6 +49,17 @@ jobs:
           echo "=== Existing images ==="
           docker images | grep python
 
+
+      - name: CD into Python source directory
+        run: |
+          echo "=== Before cd ==="
+          pwd
+          cd $GITHUB_WORKSPACE/src/python
+          echo "=== After cd ==="
+          pwd
+          echo "=== Files in src/python ==="
+          ls -la
+
       - name: Build Python app image
         uses: docker/build-push-action@v6
         with:
