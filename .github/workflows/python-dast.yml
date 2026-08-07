@@ -52,8 +52,8 @@ jobs:
       - name: Build Python app image
         uses: docker/build-push-action@v6
         with:
-          context: src/python
-          file: src/python/Dockerfile
+          context: ${{ github.workspace }}/src/python
+          file: ${{ github.workspace }}/src/python/Dockerfile
           push: false
           tags: python-app:dast
           load: true
