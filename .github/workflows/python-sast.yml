@@ -6,8 +6,8 @@ name: Python — SAST (CodeQL)
 #   java-sast.yml, dotnet-sast.yml, php-sast.yml
 
 on:
-  push:
-    branches: [ "main" ]
+#  push:
+#    branches: [ "main" ]
   pull_request:
     branches: [ "main" ]
   schedule:
