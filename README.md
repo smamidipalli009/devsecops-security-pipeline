@@ -277,5 +277,3 @@ Runner dependencies:
 
 ---
 
-> Save screenshots to `docs/screenshots/` using the filenames above.
-> `git add docs/screenshots/ && git commit -m "docs: add pipeline screenshots"`
