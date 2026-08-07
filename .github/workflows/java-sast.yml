@@ -4,9 +4,9 @@ name: Java - SAST (CodeQL)
 # Unlike Python/PHP, Java is compiled so CodeQL must trace the build.
 
 on:
-  push:
-    branches: [main]
-    paths: [src/java/**]
+#  push:
+#    branches: [main]
+#    paths: [src/java/**]
   pull_request:
     branches: [main]
     paths: [src/java/**]
