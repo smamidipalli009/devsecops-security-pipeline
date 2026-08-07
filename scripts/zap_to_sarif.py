@@ -9,30 +9,13 @@ print(f"Report file: {report_file}")
 print(f"SARIF file:  {sarif_file}")
 
 def strip_html(text):
-    """Strip HTML tags and return first plain URL found, or fallback."""
     if not text:
         return "https://www.zaproxy.org/"
-    # Extract first URL from HTML
     urls = re.findall(r'https?://[^\s<>"\']+', text)
     if urls:
         return urls[0].rstrip('/')
-    # Strip all HTML tags as fallback
     clean = re.sub(r'<[^>]+>', '', text).strip()
     return clean if clean.startswith('http') else "https://www.zaproxy.org/"
-
-def uri_to_relative(uri):
-    """
-    Convert http://localhost:5001/some/path -> some/path
-    GitHub SARIF needs relative file paths, not http:// URLs.
-    For DAST results we use the URL path as a logical location.
-    """
-    # Strip scheme and host, keep just the path
-    match = re.match(r'https?://[^/]+(/.*)?', uri)
-    if match:
-        path = match.group(1) or "/"
-        # Remove leading slash for relative path
-        return path.lstrip('/')
-    return uri
 
 sarif = {
     "version": "2.1.0",
@@ -60,9 +43,7 @@ for site in zap.get("site", []):
         rule_name = alert.get("alert", "Unknown")
         severity  = {"3": "error", "2": "warning", "1": "note", "0": "none"}.get(
                         str(alert.get("riskcode", "1")), "warning")
-
-        # Strip HTML from helpUri — GitHub SARIF requires a plain URL
-        help_uri = strip_html(alert.get("reference", ""))
+        help_uri  = strip_html(alert.get("reference", ""))
 
         if rule_id not in rules:
             rules[rule_id] = {
@@ -74,19 +55,24 @@ for site in zap.get("site", []):
             }
 
         for instance in alert.get("instances", [{}]):
-            raw_uri = instance.get("uri", site.get("@name", "unknown"))
-            # Convert http:// URI to relative path for GitHub SARIF
-            relative_uri = uri_to_relative(raw_uri)
-
+            raw_uri  = instance.get("uri", site.get("@name", "unknown"))
+            # GitHub Code Scanning requires a real source file path.
+            # DAST results have no source file — use app_fixed.py as the
+            # anchor point and record the scanned URL in the message.
             results.append({
                 "ruleId": rule_id,
                 "level": severity,
-                "message": {"text": alert.get("desc", rule_name)},
+                "message": {
+                    "text": f"{alert.get('desc', rule_name)} [Scanned URL: {raw_uri}]"
+                },
                 "locations": [{
                     "physicalLocation": {
                         "artifactLocation": {
-                            "uri": relative_uri,
+                            "uri": "src/python/app_fixed.py",
                             "uriBaseId": "%SRCROOT%"
+                        },
+                        "region": {
+                            "startLine": 1
                         }
                     }
                 }]
