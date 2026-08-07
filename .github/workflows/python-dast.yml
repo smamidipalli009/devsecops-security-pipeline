@@ -110,11 +110,10 @@ jobs:
       - name: OWASP ZAP baseline scan
         uses: zaproxy/action-baseline@v0.12.0
         env:
-          ZAP_REPORT_DIR: ${{ github.workspace }}
         with:
           target: "http://localhost:5001"
           rules_file_name: ".zap/rules.tsv"
-          cmd_options: "-I -J ${{ github.workspace }}/zap_results.json"
+          cmd_options: "-I"
           artifact_name: zap-python-report
           issue_title: "DAST — Python app ZAP findings"
           token: ${{ secrets.GITHUB_TOKEN }}
@@ -143,7 +142,7 @@ jobs:
           import json, os
 
           workspace   = os.environ.get("GITHUB_WORKSPACE", ".")
-          report_file = os.path.join(workspace, "zap_results.json")
+          report_file = os.path.join(workspace, "report_json.json")
           sarif_file  = os.path.join(workspace, "zap_sarif.sarif")
 
           print(f"Looking for ZAP report at: {report_file}")
@@ -158,7 +157,8 @@ jobs:
             }]
           }
 
-          if not os.path.exists(report_file):
+          # Check file exists AND is not empty
+          if not os.path.exists(report_file) or os.path.getsize(report_file) == 0:
             print(f"WARNING: ZAP JSON not found. Files in workspace: {os.listdir(workspace)}")
             with open(sarif_file, "w") as f:
               json.dump(sarif, f)
