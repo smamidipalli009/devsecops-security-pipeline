@@ -3,8 +3,10 @@ FROM golang:1.21-alpine AS builder
 RUN apk add --no-cache gcc musl-dev sqlite-dev
 WORKDIR /app
 COPY go.mod .
-RUN go mod download
 COPY main_fixed.go .
+# go mod tidy needs source files present to resolve imports
+RUN go mod tidy
+RUN go mod download
 RUN CGO_ENABLED=1 GOOS=linux go build -o server main_fixed.go
 
 # Stage 2: distroless static runtime
