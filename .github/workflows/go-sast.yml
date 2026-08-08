@@ -48,6 +48,7 @@ jobs:
         run: |
           cd $GITHUB_WORKSPACE/src/go
           echo "PWD=$(pwd)"
+          go mod tidy
           go build ./...
 
       - name: Perform CodeQL analysis
