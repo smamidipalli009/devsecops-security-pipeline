@@ -1,9 +1,9 @@
 name: TypeScript - SCA (Trivy)
 
 on:
-  push:
-    branches: [main]
-    paths: [src/typescript/**]
+#  push:
+#    branches: [main]
+#    paths: [src/typescript/**]
   pull_request:
     branches: [main]
     paths: [src/typescript/**]
