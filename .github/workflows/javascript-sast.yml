@@ -4,9 +4,9 @@ name: JavaScript - SAST (CodeQL)
 # CodeQL language key is 'javascript' for both JS and TS.
 
 on:
-  push:
-    branches: [main]
-    paths: [src/javascript/**]
+#  push:
+#    branches: [main]
+#    paths: [src/javascript/**]
   pull_request:
     branches: [main]
     paths: [src/javascript/**]
