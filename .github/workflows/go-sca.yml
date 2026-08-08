@@ -1,9 +1,9 @@
 name: Go - SCA (Trivy)
 
 on:
-  push:
-    branches: [main]
-    paths: [src/go/**]
+#  push:
+#    branches: [main]
+#    paths: [src/go/**]
   pull_request:
     branches: [main]
     paths: [src/go/**]
