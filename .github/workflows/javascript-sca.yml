@@ -1,9 +1,9 @@
 name: JavaScript - SCA (Trivy)
 
 on:
-  push:
-    branches: [main]
-    paths: [src/javascript/**]
+#  push:
+#    branches: [main]
+#    paths: [src/javascript/**]
   pull_request:
     branches: [main]
     paths: [src/javascript/**]
