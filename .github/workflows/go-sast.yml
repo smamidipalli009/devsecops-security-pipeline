@@ -1,0 +1,56 @@
+name: Go - SAST (CodeQL)
+
+on:
+  push:
+    branches: [main]
+    paths: [src/go/**]
+  pull_request:
+    branches: [main]
+    paths: [src/go/**]
+  schedule:
+    - cron: "0 7 * * 1"
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+  security-events: write
+  actions: read
+
+jobs:
+  codeql-go:
+    name: CodeQL - Go
+    runs-on: [self-hosted, Linux, X64, secops_machine]
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Verify workspace
+        run: |
+          cd $GITHUB_WORKSPACE
+          echo "PWD=$(pwd)"
+          ls -la $GITHUB_WORKSPACE/src/go/
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: "1.21"
+          cache: false
+
+      - name: Initialize CodeQL
+        uses: github/codeql-action/init@v4
+        with:
+          languages: go
+          queries: security-extended
+          source-root: src/go
+
+      - name: Build Go app (CodeQL traces this)
+        run: |
+          cd $GITHUB_WORKSPACE/src/go
+          echo "PWD=$(pwd)"
+          go build ./...
+
+      - name: Perform CodeQL analysis
+        uses: github/codeql-action/analyze@v4
+        with:
+          category: sast-go

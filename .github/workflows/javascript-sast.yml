@@ -1,0 +1,49 @@
+name: JavaScript - SAST (CodeQL)
+
+# JavaScript is interpreted — no build step needed for CodeQL.
+# CodeQL language key is 'javascript' for both JS and TS.
+
+on:
+  push:
+    branches: [main]
+    paths: [src/javascript/**]
+  pull_request:
+    branches: [main]
+    paths: [src/javascript/**]
+  schedule:
+    - cron: "0 7 * * 1"
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+  security-events: write
+  actions: read
+
+jobs:
+  codeql-javascript:
+    name: CodeQL - JavaScript
+    runs-on: [self-hosted, Linux, X64, secops_machine]
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Verify workspace
+        run: |
+          cd $GITHUB_WORKSPACE
+          echo "PWD=$(pwd)"
+          ls -la $GITHUB_WORKSPACE/src/javascript/
+
+      - name: Initialize CodeQL
+        uses: github/codeql-action/init@v4
+        with:
+          languages: javascript
+          queries: security-extended
+          source-root: src/javascript
+
+      # No build step needed — JavaScript is interpreted
+
+      - name: Perform CodeQL analysis
+        uses: github/codeql-action/analyze@v4
+        with:
+          category: sast-javascript

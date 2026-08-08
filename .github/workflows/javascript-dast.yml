@@ -1,0 +1,120 @@
+name: JavaScript - DAST (OWASP ZAP)
+
+on:
+  workflow_run:
+    workflows: ["JavaScript - SCA (Trivy)"]
+    types: [completed]
+    branches: [main]
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+  security-events: write
+  issues: write
+
+jobs:
+  dast-zap-javascript:
+    name: OWASP ZAP - JavaScript app
+    runs-on: [self-hosted, Linux, X64, secops_machine]
+    if: >
+      github.event_name == 'workflow_dispatch' ||
+      github.event.workflow_run.conclusion == 'success'
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Cleanup stale containers
+        run: |
+          cd $GITHUB_WORKSPACE
+          docker rm -f javascript-app 2>/dev/null || true
+          docker rmi -f javascript-app:dast 2>/dev/null || true
+          docker ps
+
+      - name: Build JavaScript app image
+        run: |
+          cd $GITHUB_WORKSPACE/src/javascript
+          echo "PWD=$(pwd)"
+          ls -la
+          docker build -t javascript-app:dast .
+          docker images | grep javascript-app
+
+      - name: Start JavaScript app container
+        run: |
+          cd $GITHUB_WORKSPACE
+          docker run -d \
+            --name javascript-app \
+            -p 9002:9002 \
+            -e DB_PASSWORD=test \
+            -e API_KEY=test \
+            javascript-app:dast
+          sleep 5
+          docker ps | grep javascript-app
+          docker logs javascript-app
+
+      - name: Health check
+        run: |
+          cd $GITHUB_WORKSPACE
+          for i in {1..10}; do
+            STATUS=$(curl -o /dev/null -s -w "%{http_code}" http://localhost:9002/health)
+            echo "Attempt $i - HTTP $STATUS"
+            if [ "$STATUS" = "200" ]; then
+              echo "App is healthy"
+              exit 0
+            fi
+            sleep 3
+          done
+          docker logs javascript-app
+          exit 1
+
+      - name: Run OWASP ZAP baseline scan
+        run: |
+          cd $GITHUB_WORKSPACE
+          touch zap_report.json zap_report.html zap_report.md
+          chmod a+w zap_report.json zap_report.html zap_report.md
+          docker run --rm \
+            --network host \
+            -v $GITHUB_WORKSPACE:/zap/wrk/:rw \
+            ghcr.io/zaproxy/zaproxy:stable \
+            zap-baseline.py \
+            -t http://localhost:9002/ \
+            -J zap_report.json \
+            -r zap_report.html \
+            -w zap_report.md \
+            -I \
+            -c .zap/rules.tsv || true
+          echo "After ZAP:"
+          ls -la $GITHUB_WORKSPACE/
+          wc -c $GITHUB_WORKSPACE/zap_report.json
+
+      - name: Convert ZAP JSON to SARIF
+        if: always()
+        run: |
+          cd $GITHUB_WORKSPACE
+          python3 $GITHUB_WORKSPACE/scripts/zap_to_sarif.py
+          ls -la $GITHUB_WORKSPACE/
+
+      - name: Upload ZAP SARIF to Security tab
+        uses: github/codeql-action/upload-sarif@v4
+        if: always()
+        with:
+          sarif_file: ${{ github.workspace }}/zap_sarif.sarif
+          category: dast-javascript
+
+      - name: Upload ZAP reports as artifacts
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: zap-javascript-reports
+          path: |
+            ${{ github.workspace }}/zap_report.json
+            ${{ github.workspace }}/zap_report.html
+            ${{ github.workspace }}/zap_report.md
+            ${{ github.workspace }}/zap_sarif.sarif
+          retention-days: 14
+
+      - name: Stop app container
+        if: always()
+        run: |
+          docker stop javascript-app && docker rm javascript-app || true
+          docker ps

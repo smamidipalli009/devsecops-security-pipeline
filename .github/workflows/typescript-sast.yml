@@ -1,0 +1,52 @@
+name: TypeScript - SAST (CodeQL)
+
+# TypeScript uses the same CodeQL language key as JavaScript: 'javascript'
+# CodeQL automatically handles .ts files under the javascript language.
+# Unlike Java/.NET, TypeScript does NOT need a tsc build step for CodeQL —
+# CodeQL's JS/TS extractor works directly on source files.
+
+on:
+  push:
+    branches: [main]
+    paths: [src/typescript/**]
+  pull_request:
+    branches: [main]
+    paths: [src/typescript/**]
+  schedule:
+    - cron: "0 7 * * 1"
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+  security-events: write
+  actions: read
+
+jobs:
+  codeql-typescript:
+    name: CodeQL - TypeScript
+    runs-on: [self-hosted, Linux, X64, secops_machine]
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Verify workspace
+        run: |
+          cd $GITHUB_WORKSPACE
+          echo "PWD=$(pwd)"
+          ls -la $GITHUB_WORKSPACE/src/typescript/
+          ls -la $GITHUB_WORKSPACE/src/typescript/src/
+
+      - name: Initialize CodeQL
+        uses: github/codeql-action/init@v4
+        with:
+          languages: javascript
+          queries: security-extended
+          source-root: src/typescript
+
+      # No build step needed — CodeQL handles TypeScript natively
+
+      - name: Perform CodeQL analysis
+        uses: github/codeql-action/analyze@v4
+        with:
+          category: sast-typescript

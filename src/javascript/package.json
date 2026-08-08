@@ -1,0 +1,12 @@
+{
+  "name": "js-devsecops-demo",
+  "version": "1.0.0",
+  "description": "JavaScript DevSecOps demo app",
+  "main": "app_fixed.js",
+  "scripts": {
+    "start": "node app_fixed.js"
+  },
+  "dependencies": {
+    "express": "4.18.2"
+  }
+}
